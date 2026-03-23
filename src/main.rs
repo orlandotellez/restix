@@ -1,4 +1,7 @@
 mod controllers;
+mod models;
+mod services;
+mod utils;
 mod views;
 
 use std::io::{self, Stdout};
