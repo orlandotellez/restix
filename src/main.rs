@@ -15,7 +15,7 @@ use crate::{
     controllers::keyboard::{KeyboardController, NavigationAction},
     views::{
         key_info_view::KeyInfoView, keys_list_view::KeysListView, layout::MainLayout,
-        value_view::ValueView,
+        status_view::StatusView, value_view::ValueView,
     },
 };
 
@@ -33,6 +33,7 @@ pub struct App {
     pub keys_list_view: KeysListView,
     pub key_info_view: KeyInfoView,
     pub value_view: ValueView,
+    pub status_view: StatusView,
 
     pub last_key_name: String,
     pub auto_refresh: bool,
@@ -46,6 +47,7 @@ impl App {
             keys_list_view: KeysListView::new(),
             key_info_view: KeyInfoView::new(),
             value_view: ValueView::new(),
+            status_view: StatusView::new(),
             last_key_name: String::new(),
             auto_refresh: true,
             last_refresh_time: std::time::Instant::now(),
@@ -71,10 +73,12 @@ impl App {
 
                 let (keys_list_area, key_info_area, value_area) =
                     layout.split_panels(layout.main_content);
+                let status_area = layout.footer;
 
                 self.keys_list_view.render(frame, keys_list_area);
                 self.key_info_view.render(frame, key_info_area);
                 self.value_view.render(frame, value_area);
+                self.status_view.render(frame, status_area);
             });
 
             if event::poll(std::time::Duration::from_millis(100))? {
