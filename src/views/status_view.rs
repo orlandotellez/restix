@@ -1,20 +1,57 @@
-use ratatui::{Frame, layout::Rect, style::Style, widgets::Block};
+use ratatui::{
+    layout::Rect,
+    style::Style,
+    text::Line,
+    widgets::{Block, Paragraph},
+    Frame,
+};
+
+use crate::utils::formatting::format_bytes;
 
 pub struct StatusView {
     pub state: ratatui::widgets::ListState,
+    pub total_keys: usize,
+    pub total_memory: u64,
+    pub connected: bool,
+    pub error: Option<String>,
+    pub last_refresh: Option<String>,
+    pub mode_hint: String, // Hint de atajos de teclado según el modo
 }
 
 impl StatusView {
     pub fn new() -> Self {
         Self {
             state: ratatui::widgets::ListState::default(),
+            total_keys: 0,
+            total_memory: 0,
+            connected: false,
+            error: None,
+            last_refresh: None,
+            mode_hint: "h:← l:→ j/k:nav | Enter:details | r:refresh | q:quit".to_string(),
         }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
-        let block = Block::default().style(Style::default().bg(ratatui::style::Color::Yellow));
+        let connection_status = if self.connected {
+            "Connected"
+        } else {
+            "Disconnected"
+        };
 
-        frame.render_widget(block, area);
+        let memory_str = format_bytes(self.total_memory);
+
+        let content = vec![Line::from(format!(
+            "Keys: {} | Memory: {} | {} | Last Refresh: {} | {}",
+            self.total_keys,
+            memory_str,
+            connection_status,
+            self.last_refresh.as_deref().unwrap_or("Never"),
+            self.mode_hint
+        ))];
+
+        let paragraph = Paragraph::new(content).style(Style::default());
+
+        frame.render_widget(paragraph, area);
     }
 }
 
