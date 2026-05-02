@@ -30,6 +30,10 @@ impl RedisService {
         Ok(())
     }
 
+    pub fn is_connected(&self) -> bool {
+        self.connection.is_some()
+    }
+
     pub fn fetch_keys(&mut self) -> Result<RedisData> {
         let conn = self.connection.as_mut().context("Not connected to Redis")?;
 
@@ -90,10 +94,6 @@ impl RedisService {
             connected: true,
             error: None,
         })
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.connection.is_some()
     }
 
     /// Get the full value of a key (not just preview)
