@@ -23,6 +23,10 @@ impl ValueView {
         }
     }
 
+    pub fn set_focus(&mut self, focused: bool) {
+        self.focused = focused;
+    }
+
     pub fn render(&self, frame: &mut Frame, area: Rect) {
         // early return si no hay área
         if area.height == 0 {

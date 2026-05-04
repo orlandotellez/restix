@@ -2,7 +2,7 @@ use ratatui::{
     layout::Rect,
     style::Style,
     text::Line,
-    widgets::{Block, Paragraph},
+    widgets::Paragraph,
     Frame,
 };
 
@@ -27,8 +27,14 @@ impl StatusView {
             connected: false,
             error: None,
             last_refresh: None,
-            mode_hint: "h:← l:→ j/k:nav | Enter:details | r:refresh | q:quit".to_string(),
+            mode_hint: "Tab:nav | Enter:settings | Esc:back | q:quit".to_string(),
         }
+    }
+
+    pub fn set_message(&mut self, message: String) {
+        // Temporary method to show a status message
+        // In production, this would use a timeout or different mechanism
+        self.error = Some(message);
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {

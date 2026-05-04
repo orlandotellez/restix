@@ -31,15 +31,27 @@ impl MainLayout {
         (chunks[0], chunks[1])
     }
 
-    // Reorganiza el contenido, en la parte derecha se divide en 2
-    pub fn split_panels(&self, area: Rect) -> (Rect, Rect, Rect) {
+    // Divide el panel izquierdo en keys_list y settings, y el derecho en info y value
+    pub fn split_panels(&self, area: Rect) -> (Rect, Rect, Rect, Rect) {
         let (content_left, content_right) = self.split_content(area);
 
+        // Dividir panel izquierdo verticalmente: 75% keys_list, 25% settings
+        let left_panels = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
+            .split(content_left);
+
+        // Dividir panel derecho verticalmente: 25% info, 75% value
         let right_panels = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+            .constraints([Constraint::Percentage(15), Constraint::Percentage(85)])
             .split(content_right);
 
-        (content_left, right_panels[0], right_panels[1])
+        (
+            left_panels[0],
+            left_panels[1],
+            right_panels[0],
+            right_panels[1],
+        )
     }
 }
