@@ -34,6 +34,39 @@ impl RedisService {
         self.connection.is_some()
     }
 
+    /// Execute PING command and return result
+    pub fn ping(&mut self) -> Result<String> {
+        let conn = self.connection.as_mut().context("Not connected to Redis")?;
+        let pong: String = redis::cmd("PING").query(conn)?;
+        Ok(pong)
+    }
+
+    /// Reconectar a una nueva URL de Redis
+    pub fn reconnect(&mut self, url: &str) -> Result<()> {
+        let client = Client::open(url).context("Failed to create Redis client")?;
+        let connection = client
+            .get_connection()
+            .context("Failed to connect to Redis")?;
+        self.client = client;
+        self.connection = Some(connection);
+        Ok(())
+    }
+
+    pub fn test_connection(url: &str) -> Result<()> {
+        let client = Client::open(url).context("Failed to create Redis client")?;
+        let mut conn = client
+            .get_connection()
+            .context("Failed to connect to Redis")?;
+
+        // Quick PING to verify the connection works
+        let pong: String = redis::cmd("PING").query(&mut conn)?;
+        if pong != "PONG" {
+            anyhow::bail!("Unexpected PING response: {}", pong);
+        }
+
+        Ok(())
+    }
+
     pub fn fetch_keys(&mut self) -> Result<RedisData> {
         let conn = self.connection.as_mut().context("Not connected to Redis")?;
 
