@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     models::redis_model::KeyInfo,
-    utils::formatting::{format_bytes, format_ttl},
+    utils::formatting::format_ttl,
 };
 
 use crossterm::event::KeyCode;
@@ -71,8 +71,6 @@ impl KeyInfoView {
                     Line::from(format!("Type: {}", key.key_type)),
                     Line::from(""),
                     Line::from(format!("TTL: {}", format_ttl(key.ttl))),
-                    Line::from(""),
-                    Line::from(format!("Memory: {}", format_bytes(key.memory_bytes))),
                 ];
 
                 let paragraph = Paragraph::new(content)

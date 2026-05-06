@@ -41,10 +41,10 @@ impl MainLayout {
             .constraints([Constraint::Percentage(85), Constraint::Percentage(15)])
             .split(content_left);
 
-        // Dividir panel derecho verticalmente: 25% info, 75% value
+        // Dividir panel derecho verticalmente: 30% info, 70% value
         let right_panels = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(15), Constraint::Percentage(85)])
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
             .split(content_right);
 
         (
