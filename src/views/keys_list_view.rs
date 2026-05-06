@@ -10,6 +10,8 @@ use crate::{
     utils::formatting::{format_bytes, format_ttl, get_type_badge},
 };
 
+use crossterm::event::KeyCode;
+
 pub struct KeysListView {
     pub state: ratatui::widgets::ListState,
     pub items: Vec<KeyInfo>,
@@ -38,6 +40,9 @@ impl KeysListView {
             if selected >= self.items.len() {
                 self.state.select(Some(self.items.len().saturating_sub(1)));
             }
+        } else if !self.items.is_empty() {
+            // Seleccionar la primera key si no había selección previa
+            self.state.select(Some(0));
         }
     }
 
@@ -67,6 +72,26 @@ impl KeysListView {
             None => 0,
         };
         self.state.select(Some(i));
+    }
+
+    /// Devuelve la key actualmente seleccionada (si hay alguna)
+    pub fn get_selected_key(&self) -> Option<&KeyInfo> {
+        self.state
+            .selected()
+            .and_then(|idx| self.items.get(idx))
+    }
+
+    /// Verifica si hay una key seleccionada
+    pub fn has_selection(&self) -> bool {
+        self.state.selected().is_some()
+    }
+
+    pub fn handle_input(&mut self, key_code: KeyCode) {
+        match key_code {
+            KeyCode::Char('j') | KeyCode::Down => self.next(),
+            KeyCode::Char('k') | KeyCode::Up => self.previous(),
+            _ => {}
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {

@@ -9,14 +9,11 @@ use std::io::{self, Stdout};
 use anyhow::Result;
 use ratatui::{
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, KeyCode, KeyEventKind},
+        event::{self, DisableMouseCapture, EnableMouseCapture, KeyEventKind},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
-    layout::Alignment,
     prelude::CrosstermBackend,
-    style::Style,
-    widgets::{Block, Borders, Clear, Paragraph},
     Terminal,
 };
 
@@ -24,12 +21,8 @@ use crate::{
     controllers::keyboard::{KeyboardController, NavigationAction},
     services::redis_service::RedisService,
     views::{
-        connection_modal::{self, ConnectionModal},
-        key_info_view::KeyInfoView,
-        keys_list_view::KeysListView,
-        layout::MainLayout,
-        settings_view::SettingsView,
-        status_view::StatusView,
+        connection_modal, key_info_view::KeyInfoView, keys_list_view::KeysListView,
+        layout::MainLayout, settings_view::SettingsView, status_view::StatusView,
         value_view::ValueView,
     },
 };
@@ -58,7 +51,7 @@ pub struct App {
     pub status_view: StatusView,
 
     // Modal state
-    pub connection_modal: Option<ConnectionModal>,
+    pub connection_modal: Option<crate::views::connection_modal::ConnectionModal>,
 
     // Test popup state
     pub test_popup: Option<TestResultPopup>,
@@ -76,13 +69,13 @@ pub struct App {
 }
 
 impl App {
-    /// obtener la url del archivo de configuración (~/.restix.conf)
+    /// Get the path to the config file (~/.restix.conf)
     fn config_file_path() -> std::path::PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         std::path::PathBuf::from(home).join(".restix.conf")
     }
 
-    /// Guardar la url de redis establecida  en el archivo de configuracion restix.conf
+    /// Save the Redis URL to config file
     fn save_config(url: &str) {
         let path = Self::config_file_path();
         if let Err(e) = std::fs::write(&path, format!("REDIS_URL={}\n", url)) {
@@ -90,7 +83,7 @@ impl App {
         }
     }
 
-    /// Cargar la url de redis desde el archivo de configuracion
+    /// Load the Redis URL from config file (returns None if not found)
     fn load_config() -> Option<String> {
         let path = Self::config_file_path();
         if let Ok(content) = std::fs::read_to_string(&path) {
@@ -107,6 +100,7 @@ impl App {
     }
 
     pub fn new() -> Result<Self> {
+        // Try: 1. Config file, 2. Default
         let redis_url = Self::load_config().unwrap_or_else(|| "redis://localhost:6379".to_string());
 
         let mut redis_service = RedisService::new(&redis_url)?;
@@ -173,6 +167,7 @@ impl App {
                     modal.render(frame, area);
                 }
 
+                // Render test popup si está activo
                 if let Some(ref popup) = self.test_popup {
                     Self::render_test_popup(frame, area, &popup.message);
                 }
@@ -194,8 +189,10 @@ impl App {
                         }
 
                         if self.connection_modal.is_some() {
+                            // Modal is open - handle modal input
                             self.handle_modal_input(key.code);
                         } else {
+                            // No modal - handle regular input
                             let selected_option = if self.current_focus == FocusPanel::Settings {
                                 Some(self.settings_view.selected_option)
                             } else {
@@ -203,19 +200,47 @@ impl App {
                             };
 
                             let action = KeyboardController::map_key_event(
-                                key.code,
+                                &key,
                                 &self.current_focus,
                                 selected_option,
                             );
 
                             match action {
                                 NavigationAction::Quit => break,
-                                NavigationAction::Tab => {
+                                NavigationAction::MoveLeft => {
+                                    // Backspace: navegación inversa - ciclo Value → Settings → KeysList
+                                    self.current_focus = match self.current_focus {
+                                        FocusPanel::KeysList => FocusPanel::Value,
+                                        FocusPanel::Settings => FocusPanel::KeysList,
+                                        FocusPanel::Value => FocusPanel::Settings,
+                                        FocusPanel::Details => FocusPanel::KeysList,
+                                    };
+                                }
+                                NavigationAction::MoveRight => {
+                                    // Tab / Ctrl + l: navegación principal - ciclo KeysList → Settings → Value
                                     self.current_focus = match self.current_focus {
                                         FocusPanel::KeysList => FocusPanel::Settings,
-                                        FocusPanel::Settings => FocusPanel::Details,
-                                        FocusPanel::Details => FocusPanel::Value,
+                                        FocusPanel::Settings => FocusPanel::Value,
                                         FocusPanel::Value => FocusPanel::KeysList,
+                                        FocusPanel::Details => FocusPanel::Value, // KeyInfo puede ir a Value
+                                    };
+                                }
+                                NavigationAction::MoveDown => {
+                                    // Ctrl + j: ciclo hacia abajo
+                                    self.current_focus = match self.current_focus {
+                                        FocusPanel::KeysList => FocusPanel::Settings,
+                                        FocusPanel::Settings => FocusPanel::Value,
+                                        FocusPanel::Value => FocusPanel::KeysList,
+                                        FocusPanel::Details => FocusPanel::Value,
+                                    };
+                                }
+                                NavigationAction::MoveUp => {
+                                    // Ctrl + k: ciclo hacia arriba (inverso)
+                                    self.current_focus = match self.current_focus {
+                                        FocusPanel::KeysList => FocusPanel::Value,
+                                        FocusPanel::Settings => FocusPanel::KeysList,
+                                        FocusPanel::Value => FocusPanel::Settings,
+                                        FocusPanel::Details => FocusPanel::KeysList,
                                     };
                                 }
                                 NavigationAction::OpenConnectionModal => {
@@ -224,15 +249,35 @@ impl App {
                                             &self.current_redis_url,
                                         ));
                                 }
-                                _ => {}
-                            }
-
-                            if self.current_focus == FocusPanel::Settings
-                                && self.connection_modal.is_none()
-                            {
-                                match key.code {
-                                    KeyCode::Up | KeyCode::Down => {}
-                                    _ => {}
+                                NavigationAction::SelectKeyGoToValue => {
+                                    // Enter en KeysList: actualizar detalles e ir a Value
+                                    self.update_key_details();
+                                    self.current_focus = FocusPanel::Value;
+                                }
+                                NavigationAction::GoBackToKeysList => {
+                                    // Escape en Value: volver a KeysList
+                                    self.current_focus = FocusPanel::KeysList;
+                                }
+                                NavigationAction::None => {
+                                    // Si no hay acción global, pasar la tecla al panel enfocado
+                                    if self.connection_modal.is_none() {
+                                        match self.current_focus {
+                                            FocusPanel::KeysList => {
+                                                self.keys_list_view.handle_input(key.code);
+                                                // Actualizar KeyInfoView y ValueView cuando cambia la selección
+                                                self.update_key_details();
+                                            }
+                                            FocusPanel::Settings => {
+                                                self.settings_view.handle_input(key.code)
+                                            }
+                                            FocusPanel::Details => {
+                                                self.key_info_view.handle_input(key.code)
+                                            }
+                                            FocusPanel::Value => {
+                                                self.value_view.handle_input(key.code)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -252,6 +297,12 @@ impl App {
     }
 
     fn render_test_popup(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, message: &str) {
+        use ratatui::{
+            layout::Alignment,
+            style::Style,
+            widgets::{Block, Borders, Clear, Paragraph},
+        };
+
         let popup_width = 40u16;
         let popup_height = 5u16;
 
@@ -260,6 +311,7 @@ impl App {
 
         let popup_area = ratatui::layout::Rect::new(x, y, popup_width, popup_height);
 
+        // Clear the area behind the popup
         frame.render_widget(Clear, popup_area);
 
         let block = Block::default()
@@ -283,6 +335,7 @@ impl App {
             match key_code {
                 Enter => match modal.selected_action {
                     connection_modal::ModalAction::Connect => {
+                        // Connect: reconnect to the URL and save it
                         let url = modal.get_url().to_string();
                         self.connection_modal = None;
                         match self.redis_service.reconnect(&url) {
@@ -294,6 +347,8 @@ impl App {
                                 match self.redis_service.fetch_keys() {
                                     Ok(redis_data) => {
                                         self.keys_list_view.update(redis_data.keys);
+                                        // Actualizar los detalles de la key seleccionada
+                                        self.update_key_details();
                                         self.status_view.set_message(format!(
                                             "Connected to Redis at {}",
                                             self.current_redis_url
@@ -301,6 +356,7 @@ impl App {
                                     }
                                     Err(e) => {
                                         self.keys_list_view.update(vec![]);
+                                        self.update_key_details();
                                         self.status_view.set_message(format!(
                                             "Connected but failed to fetch keys: {}",
                                             e
@@ -309,6 +365,7 @@ impl App {
                                 }
                             }
                             Err(e) => {
+                                // Even if reconnect fails, update the URL so user can see what they tried
                                 self.current_redis_url = url;
                                 self.status_view
                                     .set_message(format!("Connection failed: {}", e));
@@ -316,9 +373,11 @@ impl App {
                         }
                     }
                     connection_modal::ModalAction::Test => {
+                        // Test: try the URL without changing current connection
                         let url = modal.get_url().to_string();
                         self.connection_modal = None;
 
+                        // Test the connection using the static method (doesn't affect current connection)
                         let result = RedisService::test_connection(&url);
                         let message = match result {
                             Ok(()) => format!("✅ Connection Successful to {}", url),
@@ -342,6 +401,32 @@ impl App {
                     modal.handle_input(key_code);
                 }
             }
+        }
+    }
+
+    /// Actualiza KeyInfoView y ValueView según la key seleccionada en KeysListView
+    fn update_key_details(&mut self) {
+        if let Some(selected_key) = self.keys_list_view.get_selected_key() {
+            // Actualizar KeyInfoView con la información de la key
+            self.key_info_view.set_key(Some(selected_key.clone()));
+
+            // Obtener el valor completo de Redis y actualizar ValueView
+            match self
+                .redis_service
+                .get_full_value(&selected_key.name, &selected_key.key_type)
+            {
+                Ok(value) => {
+                    self.value_view.set_content(value);
+                }
+                Err(e) => {
+                    self.value_view
+                        .set_content(format!("Error fetching value: {}", e));
+                }
+            }
+        } else {
+            // No hay selección, limpiar las vistas
+            self.key_info_view.set_key(None);
+            self.value_view.clear();
         }
     }
 }

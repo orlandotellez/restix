@@ -11,6 +11,8 @@ use crate::{
     utils::formatting::{format_bytes, format_ttl},
 };
 
+use crossterm::event::KeyCode;
+
 pub struct KeyInfoView {
     pub state: ratatui::widgets::ListState,
     pub key_info: Option<KeyInfo>,
@@ -28,6 +30,15 @@ impl KeyInfoView {
 
     pub fn set_focus(&mut self, focused: bool) {
         self.focused = focused;
+    }
+
+    pub fn handle_input(&mut self, key_code: KeyCode) {
+        match key_code {
+            // j/k no hacen nada porque es información estática
+            KeyCode::Char('j') | KeyCode::Down => {}
+            KeyCode::Char('k') | KeyCode::Up => {}
+            _ => {}
+        }
     }
 
     pub fn set_key(&mut self, key: Option<KeyInfo>) {

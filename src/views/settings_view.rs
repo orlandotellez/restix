@@ -5,6 +5,8 @@ use ratatui::{
     Frame,
 };
 
+use crossterm::event::KeyCode;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SettingsOption {
     RedisConnection,
@@ -33,6 +35,15 @@ impl SettingsView {
 
     pub fn set_focus(&mut self, focused: bool) {
         self.focused = focused;
+    }
+
+    pub fn handle_input(&mut self, key_code: KeyCode) {
+        match key_code {
+            // j/k no hacen nada porque solo hay una opción, pero lo dejamos preparado
+            KeyCode::Char('j') | KeyCode::Down => {}
+            KeyCode::Char('k') | KeyCode::Up => {}
+            _ => {}
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {

@@ -6,6 +6,8 @@ use ratatui::{
     Frame,
 };
 
+use crossterm::event::KeyCode;
+
 pub struct ValueView {
     pub state: ratatui::widgets::ListState,
     pub lines: Vec<String>, // Todas las líneas del valor
@@ -25,6 +27,34 @@ impl ValueView {
 
     pub fn set_focus(&mut self, focused: bool) {
         self.focused = focused;
+    }
+
+    /// Establece el contenido del valor desde un string (divide en líneas)
+    pub fn set_content(&mut self, content: String) {
+        self.lines = content.lines().map(|s| s.to_string()).collect();
+        self.cursor_line = 0;
+    }
+
+    /// Limpia el contenido
+    pub fn clear(&mut self) {
+        self.lines.clear();
+        self.cursor_line = 0;
+    }
+
+    pub fn handle_input(&mut self, key_code: KeyCode) {
+        match key_code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.cursor_line < self.lines.len().saturating_sub(1) {
+                    self.cursor_line += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if self.cursor_line > 0 {
+                    self.cursor_line -= 1;
+                }
+            }
+            _ => {}
+        }
     }
 
     pub fn render(&self, frame: &mut Frame, area: Rect) {
