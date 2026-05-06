@@ -12,6 +12,7 @@ pub enum NavigationAction {
     OpenConnectionModal,
     SelectKeyGoToValue, // Enter en KeysList: seleccionar y ir a Value
     GoBackToKeysList,   // Escape en Value: volver a KeysList
+    TogglePause,        // p: pausar/resumir auto-refresh
     None,               // j, k (sin Ctrl) y otras teclas van a las vistas
 }
 
@@ -85,6 +86,9 @@ impl KeyboardController {
                     NavigationAction::None
                 }
             }
+
+            // p: pausar/resumir auto-refresh
+            KeyCode::Char('p') => NavigationAction::TogglePause,
 
             // j, k  y cualquier otra tecla -> None (las vistas las manejan)
             _ => NavigationAction::None,

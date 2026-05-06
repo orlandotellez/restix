@@ -1,7 +1,7 @@
 use ratatui::{
     layout::Rect,
-    style::Style,
-    text::Line,
+    style::{Color, Style},
+    text::{Line, Span},
     widgets::Paragraph,
     Frame,
 };
@@ -15,7 +15,9 @@ pub struct StatusView {
     pub connected: bool,
     pub error: Option<String>,
     pub last_refresh: Option<String>,
-    pub mode_hint: String, // Hint de atajos de teclado según el modo
+    pub mode_hint: String,   // Hint de atajos de teclado según el modo
+    pub paused: bool,        // Si el auto-refresh está pausado
+    pub seconds_since_refresh: u64, // Segundos desde el último refresh
 }
 
 impl StatusView {
@@ -27,7 +29,9 @@ impl StatusView {
             connected: false,
             error: None,
             last_refresh: None,
-            mode_hint: "Tab:nav | Enter:view | Esc:back | q:quit".to_string(),
+            mode_hint: "Tab:nav | Enter:view | p:pause | Esc:back | q:quit".to_string(),
+            paused: false,
+            seconds_since_refresh: 0,
         }
     }
 
@@ -36,6 +40,17 @@ impl StatusView {
         self.total_keys = keys_count;
         self.total_memory = memory;
         self.connected = connected;
+        self.seconds_since_refresh = 0;
+    }
+
+    /// Set paused state
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
+    /// Increment seconds since last refresh
+    pub fn increment_seconds(&mut self) {
+        self.seconds_since_refresh += 1;
     }
 
     pub fn set_message(&mut self, message: String) {
@@ -53,14 +68,55 @@ impl StatusView {
 
         let memory_str = format_bytes(self.total_memory);
 
-        let content = vec![Line::from(format!(
-            "Keys: {} | Memory: {} | {} | Last Refresh: {} | {}",
-            self.total_keys,
-            memory_str,
-            connection_status,
-            self.last_refresh.as_deref().unwrap_or("Never"),
-            self.mode_hint
-        ))];
+        // Color para cuando está pausado (igual que el foco - azul)
+        let highlight_style = if self.paused {
+            Style::default().fg(Color::Blue)
+        } else {
+            Style::default()
+        };
+
+        // Construir TODO en una sola línea
+        let mut all_spans = Vec::new();
+
+        // Keys: X
+        all_spans.push(Span::raw("Keys: "));
+        all_spans.push(Span::styled(format!("{}", self.total_keys), highlight_style));
+        all_spans.push(Span::raw(" | "));
+
+        // Memory: X
+        all_spans.push(Span::raw("Memory: "));
+        all_spans.push(Span::styled(memory_str, Style::default()));
+        all_spans.push(Span::raw(" | "));
+
+        // Connection status
+        all_spans.push(Span::raw(connection_status));
+        all_spans.push(Span::raw(" | "));
+
+        // Si está pausado, mostrar PAUSED antes de los hints
+        if self.paused {
+            all_spans.push(Span::styled("PAUSED", highlight_style));
+            all_spans.push(Span::raw(" | "));
+        }
+
+        // Mode hints - si está pausado, todo p:pause en color del foco
+        if self.paused {
+            let parts: Vec<&str> = self.mode_hint.split(" | ").collect();
+            for (i, part) in parts.iter().enumerate() {
+                if i > 0 {
+                    all_spans.push(Span::raw(" | "));
+                }
+                if part.starts_with("p:") {
+                    // Todo "p:pause" en azul
+                    all_spans.push(Span::styled(*part, highlight_style));
+                } else {
+                    all_spans.push(Span::raw(*part));
+                }
+            }
+        } else {
+            all_spans.push(Span::raw(&self.mode_hint));
+        }
+
+        let content = vec![Line::from(all_spans)];
 
         let paragraph = Paragraph::new(content).style(Style::default());
 

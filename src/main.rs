@@ -65,6 +65,7 @@ pub struct App {
 
     pub last_key_name: String,
     pub auto_refresh: bool,
+    pub paused: bool,
     pub last_refresh_time: std::time::Instant,
 }
 
@@ -149,6 +150,7 @@ impl App {
             current_focus: FocusPanel::KeysList,
             last_key_name: String::new(),
             auto_refresh: true,
+            paused: false,
             last_refresh_time: std::time::Instant::now(),
         })
     }
@@ -208,6 +210,34 @@ impl App {
                     self.test_popup = None;
                 }
             }
+
+            // Auto-refresh cada 1 segundo si no está pausado
+            if !self.paused && self.auto_refresh {
+                let now = std::time::Instant::now();
+                if now.duration_since(self.last_refresh_time).as_secs() >= 1 {
+                    // Refresh keys
+                    match self.redis_service.fetch_keys() {
+                        Ok(data) => {
+                            let keys_count = data.keys.len();
+                            self.keys_list_view.update(data.keys);
+                            self.status_view.update_totals(
+                                keys_count,
+                                data.total_memory,
+                                true,
+                            );
+                        }
+                        Err(_) => {
+                            // Connection lost - update status
+                            self.status_view.update_totals(0, 0, false);
+                        }
+                    }
+                    self.last_refresh_time = now;
+                }
+                // Incrementar contador de segundos
+                self.status_view.increment_seconds();
+            }
+            // Sincronizar estado de pausa con status_view
+            self.status_view.set_paused(self.paused);
 
             if event::poll(std::time::Duration::from_millis(100))? {
                 if let event::Event::Key(key) = event::read()? {
@@ -286,6 +316,16 @@ impl App {
                                 NavigationAction::GoBackToKeysList => {
                                     // Escape en Value: volver a KeysList
                                     self.current_focus = FocusPanel::KeysList;
+                                }
+                                NavigationAction::TogglePause => {
+                                    // p: pausar o reanudar auto-refresh
+                                    self.paused = !self.paused;
+                                    let msg = if self.paused {
+                                        "Auto-refresh paused (press p to resume)"
+                                    } else {
+                                        "Auto-refresh enabled"
+                                    };
+                                    self.status_view.set_message(msg.to_string());
                                 }
                                 NavigationAction::None => {
                                     // Si no hay acción global, pasar la tecla al panel enfocado
