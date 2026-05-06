@@ -409,8 +409,9 @@ impl App {
                                 ));
                             }
                             Err(e) => {
-                                // Even if reconnect fails, update the URL so user can see what they tried
-                                self.current_redis_url = url;
+                                // Even if reconnect fails, save the URL so user can try again
+                                self.current_redis_url = url.clone();
+                                Self::save_config(&url);
                                 self.status_view
                                     .set_message(format!("Connection failed: {}", e));
                             }

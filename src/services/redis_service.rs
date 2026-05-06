@@ -6,47 +6,63 @@ use anyhow::{Context, Result};
 use redis::{Client, Commands, Connection};
 
 pub struct RedisService {
-    client: Client,
+    client: Option<Client>, // Option to handle invalid URLs
     connection: Option<Connection>,
     pub total_memory: u64,
-    pub connected: bool,     // Track connection state
-    pub current_url: String, // Track current URL
+    pub connected: bool,      // Track connection state
+    pub current_url: String,  // Track current URL
+    pub invalid_url: bool,    // Flag for invalid URL
 }
 
 impl RedisService {
+    /// Create a new RedisService - doesn't fail even with invalid URL
     pub fn new(url: &str) -> Result<Self> {
-        let client = Client::open(url).context("Failed to create Redis client")?;
+        let (client, invalid_url) = match Client::open(url) {
+            Ok(c) => (Some(c), false),
+            Err(e) => {
+                eprintln!("Warning: Invalid Redis URL '{}': {}", url, e);
+                (None, true)
+            }
+        };
         Ok(Self {
             client,
             connection: None,
             total_memory: 0,
             connected: false,
             current_url: url.to_string(),
+            invalid_url,
         })
     }
 
     pub fn connect(&mut self) -> Result<bool> {
         // Use same logic as reconnect - copy URL first to avoid borrow issues
         let url = self.current_url.clone();
-        match Client::open(url) {
-            Ok(client) => {
-                match client.get_connection() {
-                    Ok(connection) => {
-                        self.client = client;
-                        self.connection = Some(connection);
-                        self.connected = true;
-                        Ok(true)
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Could not connect to Redis: {}", e);
-                        self.connected = false;
-                        Ok(false)
-                    }
-                }
+
+        // Same logic as reconnect for consistency
+        let client = match Client::open(url.clone()) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Warning: Invalid Redis URL '{}': {}", url, e);
+                self.client = None;
+                self.invalid_url = true;
+                self.connected = false;
+                return Ok(false);
+            }
+        };
+
+        match client.get_connection() {
+            Ok(connection) => {
+                self.client = Some(client);
+                self.connection = Some(connection);
+                self.connected = true;
+                self.invalid_url = false;
+                Ok(true)
             }
             Err(e) => {
-                eprintln!("Warning: Could not create Redis client: {}", e);
+                self.client = Some(client);
                 self.connected = false;
+                self.invalid_url = false;
+                eprintln!("Warning: Could not connect to Redis: {}", e);
                 Ok(false)
             }
         }
@@ -65,18 +81,34 @@ impl RedisService {
 
     /// Try to reconnect - returns true if successful, false if fails
     pub fn reconnect(&mut self, url: &str) -> Result<bool> {
-        let client = Client::open(url).context("Failed to create Redis client")?;
+        let client = match Client::open(url) {
+            Ok(c) => c,
+            Err(e) => {
+                // Invalid URL - mark as invalid but don't fail
+                eprintln!("Warning: Invalid Redis URL '{}': {}", url, e);
+                self.client = None;
+                self.current_url = url.to_string();
+                self.invalid_url = true;
+                self.connected = false;
+                return Ok(false);
+            }
+        };
+
         match client.get_connection() {
             Ok(connection) => {
-                self.client = client;
+                self.client = Some(client);
                 self.connection = Some(connection);
                 self.connected = true;
                 self.current_url = url.to_string();
+                self.invalid_url = false;
                 Ok(true)
             }
             Err(e) => {
-                // Keep the old connection if available, otherwise mark as disconnected
+                // Valid URL but can't connect - keep client but mark as disconnected
+                self.client = Some(client);
+                self.current_url = url.to_string();
                 self.connected = false;
+                self.invalid_url = false;
                 eprintln!("Warning: Could not reconnect to Redis: {}", e);
                 Ok(false)
             }
