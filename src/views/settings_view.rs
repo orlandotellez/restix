@@ -74,9 +74,17 @@ impl SettingsView {
             .constraints([Constraint::Length(1)])
             .split(inner_area);
 
-        let style = Style::default()
-            .bg(ratatui::style::Color::Blue)
-            .fg(ratatui::style::Color::White);
+        // Si el panel tiene foco: azul brillante, si no: más oscuro
+        // El texto siempre es blanco
+        let style = if self.focused {
+            Style::default()
+                .bg(ratatui::style::Color::Blue)
+                .fg(ratatui::style::Color::White)
+        } else {
+            Style::default()
+                .bg(ratatui::style::Color::DarkGray)
+                .fg(ratatui::style::Color::White)
+        };
 
         let paragraph = Paragraph::new(redis_connection.label()).style(style);
         frame.render_widget(paragraph, chunks[0]);

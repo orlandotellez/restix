@@ -112,12 +112,14 @@ impl ConnectionModal {
             ])
             .split(chunks[2]);
 
+        // Cuando está seleccionado: fondo azul, texto blanco
+        // Cuando NO está seleccionado: texto normal (dim para que se note que no tiene foco)
         let connect_style = if self.selected_action == ModalAction::Connect {
             Style::default()
                 .bg(ratatui::style::Color::Blue)
                 .fg(ratatui::style::Color::White)
         } else {
-            Style::default()
+            Style::default().dim()
         };
 
         let test_style = if self.selected_action == ModalAction::Test {
@@ -125,7 +127,7 @@ impl ConnectionModal {
                 .bg(ratatui::style::Color::Blue)
                 .fg(ratatui::style::Color::White)
         } else {
-            Style::default()
+            Style::default().dim()
         };
 
         let cancel_style = if self.selected_action == ModalAction::Cancel {
@@ -133,7 +135,7 @@ impl ConnectionModal {
                 .bg(ratatui::style::Color::Blue)
                 .fg(ratatui::style::Color::White)
         } else {
-            Style::default()
+            Style::default().dim()
         };
 
         let connect_btn = Paragraph::new("Connect")
