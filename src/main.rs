@@ -107,6 +107,19 @@ impl App {
 
         let connected = redis_service.connect().unwrap_or(false);
 
+        // Fetch keys immediately after connecting
+        let keys = if connected {
+            redis_service.fetch_keys().map(|data| data.keys).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let keys_list_view = {
+            let mut view = KeysListView::new();
+            view.update(keys);
+            view
+        };
+
         let status_message = if connected {
             format!("Connected to Redis at {}", redis_url)
         } else {
@@ -118,7 +131,7 @@ impl App {
 
         Ok(Self {
             terminal: Terminal::new(CrosstermBackend::new(io::stdout()))?,
-            keys_list_view: KeysListView::new(),
+            keys_list_view,
             settings_view: SettingsView::new(),
             key_info_view: KeyInfoView::new(),
             value_view: ValueView::new(),

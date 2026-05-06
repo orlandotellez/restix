@@ -26,15 +26,26 @@ impl RedisService {
     }
 
     pub fn connect(&mut self) -> Result<bool> {
-        match self.client.get_connection() {
-            Ok(conn) => {
-                self.connection = Some(conn);
-                self.connected = true;
-                Ok(true)
+        // Use same logic as reconnect - copy URL first to avoid borrow issues
+        let url = self.current_url.clone();
+        match Client::open(url) {
+            Ok(client) => {
+                match client.get_connection() {
+                    Ok(connection) => {
+                        self.client = client;
+                        self.connection = Some(connection);
+                        self.connected = true;
+                        Ok(true)
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Could not connect to Redis: {}", e);
+                        self.connected = false;
+                        Ok(false)
+                    }
+                }
             }
             Err(e) => {
-                // Log but don't fail - app can run without Redis
-                eprintln!("Warning: Could not connect to Redis: {}", e);
+                eprintln!("Warning: Could not create Redis client: {}", e);
                 self.connected = false;
                 Ok(false)
             }
