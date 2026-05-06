@@ -27,8 +27,15 @@ impl StatusView {
             connected: false,
             error: None,
             last_refresh: None,
-            mode_hint: "Tab:nav | Enter:settings | Esc:back | q:quit".to_string(),
+            mode_hint: "Tab:nav | Enter:view | Esc:back | q:quit".to_string(),
         }
+    }
+
+    /// Update totals from Redis data
+    pub fn update_totals(&mut self, keys_count: usize, memory: u64, connected: bool) {
+        self.total_keys = keys_count;
+        self.total_memory = memory;
+        self.connected = connected;
     }
 
     pub fn set_message(&mut self, message: String) {

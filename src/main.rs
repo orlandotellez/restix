@@ -108,11 +108,16 @@ impl App {
         let connected = redis_service.connect().unwrap_or(false);
 
         // Fetch keys immediately after connecting
-        let keys = if connected {
-            redis_service.fetch_keys().map(|data| data.keys).unwrap_or_default()
+        let (keys, total_memory) = if connected {
+            match redis_service.fetch_keys() {
+                Ok(data) => (data.keys, data.total_memory),
+                Err(_) => (Vec::new(), 0),
+            }
         } else {
-            Vec::new()
+            (Vec::new(), 0)
         };
+
+        let keys_count = keys.len();
 
         let keys_list_view = {
             let mut view = KeysListView::new();
@@ -128,6 +133,7 @@ impl App {
 
         let mut status_view = StatusView::new();
         status_view.set_message(status_message);
+        status_view.update_totals(keys_count, total_memory, connected);
 
         Ok(Self {
             terminal: Terminal::new(CrosstermBackend::new(io::stdout()))?,
@@ -369,9 +375,13 @@ impl App {
                                 // Refresh keys list after reconnecting
                                 match self.redis_service.fetch_keys() {
                                     Ok(redis_data) => {
+                                        let keys_count = redis_data.keys.len();
+                                        let total_memory = redis_data.total_memory;
                                         self.keys_list_view.update(redis_data.keys);
                                         // Actualizar los detalles de la key seleccionada
                                         self.update_key_details();
+                                        // Update status with key count
+                                        self.status_view.update_totals(keys_count, total_memory, true);
                                         self.status_view.set_message(format!(
                                             "Connected to Redis at {}",
                                             self.current_redis_url
@@ -380,6 +390,7 @@ impl App {
                                     Err(e) => {
                                         self.keys_list_view.update(vec![]);
                                         self.update_key_details();
+                                        self.status_view.update_totals(0, 0, true);
                                         self.status_view.set_message(format!(
                                             "Connected but failed to fetch keys: {}",
                                             e
@@ -391,6 +402,7 @@ impl App {
                                 // Connection failed but no error - update URL anyway
                                 self.current_redis_url = url.clone();
                                 Self::save_config(&url);
+                                self.status_view.update_totals(0, 0, false);
                                 self.status_view.set_message(format!(
                                     "Could not connect to Redis at {}. Check the URL and try again.",
                                     url
