@@ -9,6 +9,8 @@ pub struct RedisService {
     client: Client,
     connection: Option<Connection>,
     pub total_memory: u64,
+    pub connected: bool,     // Track connection state
+    pub current_url: String, // Track current URL
 }
 
 impl RedisService {
@@ -18,20 +20,29 @@ impl RedisService {
             client,
             connection: None,
             total_memory: 0,
+            connected: false,
+            current_url: url.to_string(),
         })
     }
 
-    pub fn connect(&mut self) -> Result<()> {
-        self.connection = Some(
-            self.client
-                .get_connection()
-                .context("Failed to connect to Redis")?,
-        );
-        Ok(())
+    pub fn connect(&mut self) -> Result<bool> {
+        match self.client.get_connection() {
+            Ok(conn) => {
+                self.connection = Some(conn);
+                self.connected = true;
+                Ok(true)
+            }
+            Err(e) => {
+                // Log but don't fail - app can run without Redis
+                eprintln!("Warning: Could not connect to Redis: {}", e);
+                self.connected = false;
+                Ok(false)
+            }
+        }
     }
 
     pub fn is_connected(&self) -> bool {
-        self.connection.is_some()
+        self.connected && self.connection.is_some()
     }
 
     /// Execute PING command and return result
@@ -41,15 +52,24 @@ impl RedisService {
         Ok(pong)
     }
 
-    /// Reconectar a una nueva URL de Redis
-    pub fn reconnect(&mut self, url: &str) -> Result<()> {
+    /// Try to reconnect - returns true if successful, false if fails
+    pub fn reconnect(&mut self, url: &str) -> Result<bool> {
         let client = Client::open(url).context("Failed to create Redis client")?;
-        let connection = client
-            .get_connection()
-            .context("Failed to connect to Redis")?;
-        self.client = client;
-        self.connection = Some(connection);
-        Ok(())
+        match client.get_connection() {
+            Ok(connection) => {
+                self.client = client;
+                self.connection = Some(connection);
+                self.connected = true;
+                self.current_url = url.to_string();
+                Ok(true)
+            }
+            Err(e) => {
+                // Keep the old connection if available, otherwise mark as disconnected
+                self.connected = false;
+                eprintln!("Warning: Could not reconnect to Redis: {}", e);
+                Ok(false)
+            }
+        }
     }
 
     pub fn test_connection(url: &str) -> Result<()> {
@@ -68,6 +88,16 @@ impl RedisService {
     }
 
     pub fn fetch_keys(&mut self) -> Result<RedisData> {
+        // Return empty data if not connected
+        if !self.is_connected() {
+            return Ok(RedisData {
+                keys: Vec::new(),
+                total_memory: 0,
+                connected: false,
+                error: Some("Not connected to Redis".to_string()),
+            });
+        }
+
         let conn = self.connection.as_mut().context("Not connected to Redis")?;
 
         let keys: Vec<String> = conn.keys("*")?;
@@ -120,6 +150,7 @@ impl RedisService {
         }
 
         self.total_memory = total_memory;
+        self.connected = true;
 
         Ok(RedisData {
             keys: key_infos,
@@ -131,6 +162,13 @@ impl RedisService {
 
     /// Get the full value of a key (not just preview)
     pub fn get_full_value(&mut self, key_name: &str, key_type: &str) -> Result<String> {
+        // Return error message if not connected
+        if !self.is_connected() {
+            return Ok(
+                "Not connected to Redis. Use Tab to go to Settings and connect.".to_string(),
+            );
+        }
+
         let conn = self.connection.as_mut().context("Not connected to Redis")?;
 
         let value = match key_type {

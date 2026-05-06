@@ -104,7 +104,17 @@ impl App {
         let redis_url = Self::load_config().unwrap_or_else(|| "redis://localhost:6379".to_string());
 
         let mut redis_service = RedisService::new(&redis_url)?;
-        redis_service.connect()?;
+
+        let connected = redis_service.connect().unwrap_or(false);
+
+        let status_message = if connected {
+            format!("Connected to Redis at {}", redis_url)
+        } else {
+            format!("Not connected to Redis. Press Tab for Settings to connect.")
+        };
+
+        let mut status_view = StatusView::new();
+        status_view.set_message(status_message);
 
         Ok(Self {
             terminal: Terminal::new(CrosstermBackend::new(io::stdout()))?,
@@ -112,7 +122,7 @@ impl App {
             settings_view: SettingsView::new(),
             key_info_view: KeyInfoView::new(),
             value_view: ValueView::new(),
-            status_view: StatusView::new(),
+            status_view,
             connection_modal: None,
             test_popup: None,
             redis_service,
@@ -339,7 +349,7 @@ impl App {
                         let url = modal.get_url().to_string();
                         self.connection_modal = None;
                         match self.redis_service.reconnect(&url) {
-                            Ok(()) => {
+                            Ok(true) => {
                                 self.current_redis_url = url.clone();
                                 // Save URL to config file for persistence
                                 Self::save_config(&url);
@@ -363,6 +373,15 @@ impl App {
                                         ));
                                     }
                                 }
+                            }
+                            Ok(false) => {
+                                // Connection failed but no error - update URL anyway
+                                self.current_redis_url = url.clone();
+                                Self::save_config(&url);
+                                self.status_view.set_message(format!(
+                                    "Could not connect to Redis at {}. Check the URL and try again.",
+                                    url
+                                ));
                             }
                             Err(e) => {
                                 // Even if reconnect fails, update the URL so user can see what they tried
